@@ -1,108 +1,105 @@
-var path = require('path')
-var webpack = require('webpack')
+const path = require('path');
+const webpack = require('webpack');
+const merge = require('webpack-merge');
+const ExtractTextPlugin = require('extract-text-webpack-plugin');
+const bundleOutputDir = './wwwroot/dist';
+const UglifyJsPlugin = require('uglifyjs-webpack-plugin')
+const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
 
-module.exports = {
-  entry: './src/main.js',
-  output: {
-    path: path.resolve(__dirname, './dist'),
-    publicPath: '/dist/',
-    filename: 'build.js'
-  },
-  module: {
-    rules: [
-      {
-        test: /\.css$/,
-        use: [
-          'vue-style-loader',
-          'css-loader'
-        ],
-      },
-      {
-        test: /\.scss$/,
-        use: [
-          'vue-style-loader',
-          'css-loader',
-          'sass-loader'
-        ],
-      },
-      {
-        test: /\.sass$/,
-        use: [
-          'vue-style-loader',
-          'css-loader',
-          'sass-loader?indentedSyntax'
-        ],
-      },
-      {
-        test: /\.vue$/,
-        loader: 'vue-loader',
-        options: {
-          loaders: {
-            // Since sass-loader (weirdly) has SCSS as its default parse mode, we map
-            // the "scss" and "sass" values for the lang attribute to the right configs here.
-            // other preprocessors should work out of the box, no loader config like this necessary.
-            'scss': [
-              'vue-style-loader',
-              'css-loader',
-              'sass-loader'
-            ],
-            'sass': [
-              'vue-style-loader',
-              'css-loader',
-              'sass-loader?indentedSyntax'
+module.exports = (env) => {
+    const isDevBuild = !(env && env.prod);
+
+    const sharedConfig = {
+        stats: { modules: false },
+        context: __dirname,
+        resolve: { extensions: ['.js', '.ts', '.vue', '.scss'] },
+        module: {
+            rules: [
+                {
+                    test: /\.ts$/,
+                    loader: 'ts-loader',
+                    exclude: /node_modules/,
+                    options: {
+                        appendTsSuffixTo: [/\.vue$/],
+                        happyPackMode: true,
+                        transpileOnly: true
+                    }
+                },
+                {
+                    test: /\.scss$/,
+                    use:
+                        isDevBuild ?
+                    [{
+                        loader: "style-loader"
+                    }, {
+                        loader: "css-loader", options: {
+                            sourceMap: true
+                        }
+                    }, {
+                        loader: "sass-loader", options: {
+                            sourceMap: true,
+                            includePaths:
+                            [
+                                path.resolve(__dirname, "node_modules")
+                            ]
+                        }
+                    }]
+                    :
+                    ExtractTextPlugin.extract({
+                        fallback: 'style-loader',
+                        use:
+                        [{
+                            loader: "css-loader?minimize"
+                        }, {
+                            loader: "sass-loader", options: {
+                                includePaths:
+                                [
+                                    path.resolve(__dirname, "node_modules")
+                                ]
+                            }
+                        }]
+                    })
+                },
+                { test: /\.vue$/, include: /src/, loader: 'vue-loader', options: { esModule: false } },
+                //{ test: /\.scss$/, include: /node_modules/, use: isDevBuild ? ['style-loader', 'css-loader', 'sass-loader'] : ExtractTextPlugin.extract({ use: 'css-loader?minimize' }) },
+                { test: /\.sass$/, include: /node_modules/, use: isDevBuild ? ['style-loader', 'css-loader', 'sass-loader?indentedSyntax'] : ExtractTextPlugin.extract({ use: 'css-loader?minimize' }) },
+                { test: /\.css$/, use: isDevBuild ? ['style-loader', 'css-loader'] : ExtractTextPlugin.extract({ use: 'css-loader?minimize' }) },
+                { test: /\.(png|jpg|jpeg|gif|svg)$/, use: 'url-loader?limit=25000' }
             ]
-          }
-          // other vue-loader options go here
-        }
-      },
-      {
-        test: /\.js$/,
-        loader: 'babel-loader',
-        exclude: /node_modules/
-      },
-      {
-        test: /\.(png|jpg|gif|svg)$/,
-        loader: 'file-loader',
-        options: {
-          name: '[name].[ext]?[hash]'
-        }
-      }
-    ]
-  },
-  resolve: {
-    alias: {
-      'vue$': 'vue/dist/vue.esm.js'
-    },
-    extensions: ['*', '.js', '.vue', '.json']
-  },
-  devServer: {
-    historyApiFallback: true,
-    noInfo: true,
-    overlay: true
-  },
-  performance: {
-    hints: false
-  },
-  devtool: '#eval-source-map'
-}
+        },
+        plugins: [
+            new ForkTsCheckerWebpackPlugin(),
+            new webpack.optimize.CommonsChunkPlugin({
+               name: 'common' // specify the common bundle's name
+            }),
+            new webpack.DefinePlugin({
+                'process.env': {
+                    NODE_ENV: JSON.stringify(isDevBuild ? 'development' : 'production')
+                }
+            })].concat(isDevBuild ? [
+                // Plugins that apply in development builds only
+                new webpack.SourceMapDevToolPlugin({
+                    filename: '[file].map', // Remove this line if you prefer inline source maps
+                    moduleFilenameTemplate: path.relative(bundleOutputDir, '[resourcePath]') // Point sourcemap entries to the original file locations on disk
+                })
+            ] : [
+                    // Plugins that apply in production builds only
+                    //new UglifyJsPlugin(),
+                    new ExtractTextPlugin('site.css')
+                ])
+    }
 
-if (process.env.NODE_ENV === 'production') {
-  module.exports.devtool = '#source-map'
-  // http://vue-loader.vuejs.org/en/workflow/production.html
-  module.exports.plugins = (module.exports.plugins || []).concat([
-    new webpack.DefinePlugin({
-      'process.env': {
-        NODE_ENV: '"production"'
-      }
-    }),
-    new webpack.optimize.UglifyJsPlugin({
-      sourceMap: true,
-      compress: {
-        warnings: false
-      }
-    }),
-    new webpack.LoaderOptionsPlugin({
-      minimize: true
-    })
-  ])
-}
+    const clientBundleConfig = merge(sharedConfig, {
+        entry: {
+            'site': './src/main.ts'
+        },
+        output: {
+            path: path.join(__dirname, bundleOutputDir),
+            filename: '[name].js',
+            publicPath: 'dist/'
+        }
+    });
+
+    return [clientBundleConfig];
+
+};

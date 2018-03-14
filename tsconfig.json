@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "allowSyntheticDefaultImports": true,
+    "experimentalDecorators": true,
+    "module": "esnext",
+    "moduleResolution": "node",
+    "lib": ["es2015", "dom" ],
+    "target": "es5",
+    "sourceMap": true,
+    "skipDefaultLibCheck": true,
+    "strict": true,
+    "allowJs": true,
+    "types": [ "webpack-env", "node", "jest" ]
+  },
+  "exclude": [
+    "bin",
+    "node_modules"
+  ]
+}
